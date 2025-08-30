@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Planner Pro</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #cceeff, #e6ccff);
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark {
+      background: #222;
+      color: #eee;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 900px;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark .container {
+      background: #333;
+      color: #eee;
+    }
+    h1 {
+      text-align: center;
+      color: #4a148c;
+    }
+    form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    input, select, button {
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    input {
+      flex: 1;
+    }
+    button {
+      background: #4a148c;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #6a1b9a;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      background: #f3e5f5;
+      margin: 8px 0;
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    body.dark li {
+      background: #555;
+    }
+    .delete-btn, .edit-btn, .complete-btn {
+      margin-left: 5px;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .delete-btn { background: red; color: white; }
+    .edit-btn { background: orange; color: white; }
+    .complete-btn { background: green; color: white; }
+    .completed {
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+    .chart-container {
+      margin-top: 30px;
+    }
+    .reset-btn {
+      background: #d32f2f;
+      margin-top: 15px;
+      width: 100%;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .search-box {
+      padding: 8px;
+      width: 50%;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    .dark-toggle {
+      background: #222;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📚 Study Planner Pro</h1>
+
+    <div class="top-bar">
+      <input type="text" id="search" class="search-box" placeholder="Search subject...">
+      <button class="dark-toggle" onclick="toggleDarkMode()">🌙 Toggle Dark Mode</button>
+    </div>
+
+    <form id="studyForm">
+      <input type="text" id="subject" placeholder="Enter Subject" required>
+      <input type="number" id="hours" placeholder="Hours per Week" min="1" required>
+      <select id="day">
+        <option value="Monday">Monday</option>
+        <option value="Tuesday">Tuesday</option>
+        <option value="Wednesday">Wednesday</option>
+        <option value="Thursday">Thursday</option>
+        <option value="Friday">Friday</option>
+        <option value="Saturday">Saturday</option>
+        <option value="Sunday">Sunday</option>
+      </select>
+      <button type="submit">Add</button>
+    </form>
+
+    <ul id="studyList"></ul>
+
+    <div class="chart-container">
+      <canvas id="studyChart"></canvas>
+    </div>
+
+    <button class="reset-btn" onclick="resetPlanner()">Reset Planner</button>
+  </div>
+
+  <script>
+    const form = document.getElementById("studyForm");
+    const subjectInput = document.getElementById("subject");
+    const hoursInput = document.getElementById("hours");
+    const dayInput = document.getElementById("day");
+    const studyList = document.getElementById("studyList");
+    const searchInput = document.getElementById("search");
+    const ctx = document.getElementById("studyChart").getContext("2d");
+
+    let studyData = JSON.parse(localStorage.getItem("studyPlanner")) || [];
+    let chart;
+
+    function renderList(filter = "") {
+      studyList.innerHTML = "";
+      studyData
+        .filter(item => item.subject.toLowerCase().includes(filter.toLowerCase()))
+        .forEach((item, index) => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <span class="${item.completed ? 'completed' : ''}">
+            ${item.subject} - ${item.hours} hrs/week (${item.day})
+          </span>
+          <div>
+            <button class="complete-btn" onclick="toggleComplete(${index})">✔</button>
+            <button class="edit-btn" onclick="editSubject(${index})">✎</button>
+            <button class="delete-btn" onclick="deleteSubject(${index})">X</button>
+          </div>
+        `;
+        studyList.appendChild(li);
+      });
+      renderChart();
+    }
+
+    function renderChart() {
+      const labels = studyData.map(item => item.subject);
+      const hours = studyData.map(item => item.hours);
+
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: labels,
+          datasets: [{
+            data: hours,
+            backgroundColor: [
+              "#f44336","#2196f3","#4caf50","#ff9800",
+              "#9c27b0","#00bcd4","#8bc34a","#ff5722"
+            ]
+          }]
+        }
+      });
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const subject = subjectInput.value.trim();
+      const hours = parseInt(hoursInput.value);
+      const day = dayInput.value;
+
+      if (subject && hours > 0) {
+        studyData.push({ subject, hours, day, completed: false });
+        localStorage.setItem("studyPlanner", JSON.stringify(studyData));
+        subjectInput.value = "";
+        hoursInput.value = "";
+        renderList();
+      }
+    });
+
+    function deleteSubject(index) {
+      studyData.splice(index, 1);
+      localStorage.setItem("studyPlanner", JSON.stringify(studyData));
+      renderList();
+    }
+
+    function toggleComplete(index) {
+      studyData[index].completed = !studyData[index].completed;
+      localStorage.setItem("studyPlanner", JSON.stringify(studyData));
+      renderList();
+    }
+
+    function editSubject(index) {
+      const newSubject = prompt("Edit Subject:", studyData[index].subject);
+      const newHours = prompt("Edit Hours per Week:", studyData[index].hours);
+      if (newSubject && newHours > 0) {
+        studyData[index].subject = newSubject;
+        studyData[index].hours = parseInt(newHours);
+        localStorage.setItem("studyPlanner", JSON.stringify(studyData));
+        renderList();
+      }
+    }
+
+    function resetPlanner() {
+      if (confirm("Are you sure you want to reset your study planner?")) {
+        studyData = [];
+        localStorage.removeItem("studyPlanner");
+        renderList();
+      }
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark");
+    }
+
+    searchInput.addEventListener("input", (e) => {
+      renderList(e.target.value);
+    });
+
+    renderList();
+  </script>
+</body>
+</html>
